@@ -1,0 +1,103 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/02/ALU.hdl
+
+/**
+ * The ALU (Arithmetic Logic Unit).
+ * Computes one of the following functions:
+ * x+y, x-y, y-x, 0, 1, -1, x, y, -x, -y, !x, !y,
+ * x+1, y+1, x-1, y-1, x&y, x|y on two 16-bit inputs, 
+ * according to 6 input bits denoted zx,nx,zy,ny,f,no.
+ * In addition, the ALU computes two 1-bit outputs:
+ * if the ALU output == 0, zr is set to 1; otherwise zr is set to 0;
+ * if the ALU output < 0, ng is set to 1; otherwise ng is set to 0.
+ */
+
+// Implementation: the ALU logic manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) set x = 0        // 16-bit constant
+// if (nx == 1) set x = !x       // bitwise not
+// if (zy == 1) set y = 0        // 16-bit constant
+// if (ny == 1) set y = !y       // bitwise not
+// if (f == 1)  set out = x + y  // integer 2's complement addition
+// if (f == 0)  set out = x & y  // bitwise and
+// if (no == 1) set out = !out   // bitwise not
+// if (out == 0) set zr = 1
+// if (out < 0) set ng = 1
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute out = x + y (if 1) or x & y (if 0)
+        no; // negate the out output?
+
+    OUT 
+        out[16], // 16-bit output
+        zr, // 1 if (out == 0), 0 otherwise
+        ng; // 1 if (out < 0),  0 otherwise
+
+    PARTS:
+
+    //Handle zx and nx input
+    Mux16(a=x,b[0..15]=false,sel=zx,out=xinzx);
+    Not16(in=xinzx,out=notx);
+    Mux16(a=xinzx,b=notx,sel=nx,out=xin);
+
+    //Handle zy and ny input
+    Mux16(a=y,b[0..15]=false,sel=zy,out=yinzy);
+    Not16(in=yinzy,out=noty);
+    Mux16(a=yinzy,b=noty,sel=ny,out=yin);
+
+    
+    //Handle f
+    Add16(a=xin,b=yin,out=addout);
+    And16(a=xin,b=yin,out=andout);
+    Mux16(a=andout,b=addout,sel=f,out=fout);
+
+
+    //Handle no
+    Not16(in=fout,out=notfout);
+    Mux16(a=fout,b=notfout,sel=no,out=result);
+    Or16(a=result,out=out);
+
+
+    //Handle status bits
+    Not16(in=result,out[0]=r0);
+    Not16(in=result,out[1]=r1);
+    Not16(in=result,out[2]=r2);
+    Not16(in=result,out[3]=r3);
+    Not16(in=result,out[4]=r4);
+    Not16(in=result,out[5]=r5);
+    Not16(in=result,out[6]=r6);
+    Not16(in=result,out[7]=r7);
+    Not16(in=result,out[8]=r8);
+    Not16(in=result,out[9]=r9);
+    Not16(in=result,out[10]=r10);
+    Not16(in=result,out[11]=r11);
+    Not16(in=result,out[12]=r12);
+    Not16(in=result,out[13]=r13);
+    Not16(in=result,out[14]=r14);
+    Not16(in=result,out[15]=r15);
+    Mux(a=true,b=false,sel=r15,out=ng);
+    And(a=r0,b=r1,out=zrtmp1);
+    And(a=r2,b=zrtmp1,out=zrtmp2);
+    And(a=r3,b=zrtmp2,out=zrtmp3);
+    And(a=r4,b=zrtmp3,out=zrtmp4);
+    And(a=r5,b=zrtmp4,out=zrtmp5);
+    And(a=r6,b=zrtmp5,out=zrtmp6);
+    And(a=r7,b=zrtmp6,out=zrtmp7);
+    And(a=r8,b=zrtmp7,out=zrtmp8);
+    And(a=r9,b=zrtmp8,out=zrtmp9);
+    And(a=r10,b=zrtmp9,out=zrtmp10);
+    And(a=r11,b=zrtmp10,out=zrtmp11);
+    And(a=r12,b=zrtmp11,out=zrtmp12);
+    And(a=r13,b=zrtmp12,out=zrtmp13);
+    And(a=r14,b=zrtmp13,out=zrtmp14);
+    And(a=r15,b=zrtmp14,out=zrtmp);
+    Mux(a=false,b=true,sel=zrtmp,out=zr);
+}
