@@ -1,6 +1,13 @@
 import sys
 import re
 
+SP_ADDRESS = 0
+LCL_ADDRESS = 1
+ARG_ADDRESS = 2
+THIS_ADDRESS = 3
+THAT_ADDRESS = 4
+TEMP_ADDRESS = 5
+STATIC_ADDRESS = 16
 
 def parse_file(filename):
     with open(filename, 'r', encoding='utf-8') as f:
@@ -8,9 +15,8 @@ def parse_file(filename):
     lines = content.strip().split("\n")
     return lines
 
-
 def save_value_to_address(address, value):
-    print('@' + str(abs(int(value))))
+    print('@' + str(abs(value)))
     print('D=A')
     print('@' + str(address))
     if int(value) >= 0:
@@ -18,74 +24,71 @@ def save_value_to_address(address, value):
     else:
         print('M=-D')
 
+class Stack:
+    sp = None
+    stack = []
+
+    def __init__(this, sp):
+        this.sp = sp
+
+    def push(this, value):
+        this.stack.append(value)
+        save_value_to_address(this.sp, value) 
+        this.sp += 1
+        save_value_to_address(SP_ADDRESS, this.sp)
+    def pop(this):
+        this.sp -= 1
+        save_value_to_address(SP_ADDRESS, this.sp)
+        return this.stack.pop()
+    
 
 def translate(instruction, stack):
     if instruction.startswith('push'):
-        value = re.search(r'^push constant (\d+)', instruction).group(1)
-        stack.append(int(value))
+        parsed_value = re.search(r'^push constant (\d+)', instruction).group(1)
+        stack.push(int(parsed_value))
+    elif instruction.startswith('pop local'):
+        parsed_value = re.search(r'^pop local (\d+)', instruction).group(1)
+        first = stack.pop()
     elif instruction.startswith('add'):
-        first = stack.pop()
-        second = stack.pop()
-        value = first + second
-        stack.append(value)
+        stack.push(stack.pop() + stack.pop())
     elif instruction.startswith('sub'):
-        first = stack.pop()
-        second = stack.pop()
-        value = second - first
-        print("// " + str(first) + "-" + str(second) + " = " + str(value))
-        stack.append(value)
+        value1 = stack.pop()
+        value2 = stack.pop()
+        stack.push(value2-value1)
     elif instruction.startswith('neg'):
-        first = stack.pop()
-        value = -1 * first
-        stack.append(value)
+        stack.push(-1 * stack.pop())
     elif instruction.startswith('eq'):
-        first = stack.pop()
-        second = stack.pop()
-        if first == second:
-            stack.append(-1)
+        if stack.pop() == stack.pop():
+            stack.push(-1)
         else:
-            stack.append(0)
+            stack.push(0)
     elif instruction.startswith('lt'):
-        first = stack.pop()
-        second = stack.pop()
-        if first > second:
-            stack.append(-1)
+        if stack.pop() > stack.pop():
+            stack.push(-1)
         else:
-            stack.append(0)
+            stack.push(0)
     elif instruction.startswith('gt'):
-        first = stack.pop()
-        second = stack.pop()
-        if first < second:
-            stack.append(-1)
+        if stack.pop() < stack.pop():
+            stack.push(-1)
         else:
-            stack.append(0)
+            stack.push(0)
     elif instruction.startswith('and'):
-        first = stack.pop()
-        second = stack.pop()
-        value = first & second
-        stack.append(value)
+        stack.push(stack.pop() & stack.pop())
     elif instruction.startswith('or'):
-        first = stack.pop()
-        second = stack.pop()
-        value = first | second
-        stack.append(value)
+        stack.push(stack.pop() | stack.pop())
     elif instruction.startswith('not'):
-        first = stack.pop()
-        value = ~first
-        stack.append(value)
+        stack.push(~stack.pop()) 
     else:
         raise Exception('Unknown instruction ' + instruction)
 
     return stack
 
 
-line_number = 0
-stack = []
-variable_names_lookup_table = {}
-SP_ADDRESS = 0
+stack = Stack(256)
 
 filename = sys.argv[1]
 lines = parse_file(filename)
+line_number = 0
 for line in lines:
     line_number += 1
     if '//' in line:
@@ -95,9 +98,3 @@ for line in lines:
     line = line.strip()
     stack = translate(line, stack)
 
-sp = 256
-for s in stack:
-    save_value_to_address(sp, s)
-    sp += 1
-
-save_value_to_address(SP_ADDRESS, sp)
