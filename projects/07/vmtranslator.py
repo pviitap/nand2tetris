@@ -7,7 +7,7 @@ LCL_ADDRESS = 1
 ARG_ADDRESS = 2
 THIS_ADDRESS = 3
 THAT_ADDRESS = 4
-TEMP_ADDRESS = 5
+TEMP_ADDRESS_START = 5
 STATIC_ADDRESS = 16
 
 class CodeWriter:
@@ -22,7 +22,12 @@ class CodeWriter:
         print('  @SP')
         print('  M=D')
 
-    def write_push_constant(this, value: int) -> None:
+    def write_end_loop(this) -> None:
+        print('(END)')
+        print('  @END')
+        print('  0;JMP')
+
+    def write_push_to_constant(this, value: int) -> None:
         print('  @' + str(abs(value)))
         print('  D=A')
         print('  @SP')
@@ -33,53 +38,116 @@ class CodeWriter:
             print('  M=-D')
         this.write_increment_sp()
 
+    def write_pop_to(this, base_address: int, index: int):
+        # SP--
+        # RAM[ RAM[base_address] + index ] <- RAM[SP]
+
+        this.write_decrement_sp()
+
+        print('  @' + str(base_address))
+        print('  D=M')
+        print('  @' + str(index))
+        print('  D=A+D')
+        print('  @tmp')
+        print('  M=D')
+
+        print('  @SP')
+        print('  A=M')
+        print('  D=M')
+
+        print('  @tmp')
+        print('  A=M')
+        print('  M=D')
+
+
+    def write_push_to(this, base_address: int, index: int):
+        # RAM[SP] <- RAM[ RAM[base_address] + index ]
+        # SP++
+        print('  @' + str(base_address))
+        print('  D=M')
+        print('  @' + str(index))
+        print('  D=A+D')
+        print('  A=D')
+        print('  D=M')
+
+
+        print('  @SP')
+        print('  A=M')
+        print('  M=D')
+        this.write_increment_sp()
+
+    def write_pop_to_temp(this, index: int):
+        # SP--
+        # RAM[ 5 + index ] <- RAM[SP]
+
+        this.write_decrement_sp()
+
+        print('  @SP')
+        print('  A=M')
+        print('  D=M')
+
+        print('  @' + str(TEMP_ADDRESS_START + index))
+        print('  M=D')
+
+
+    def write_push_to_temp(this, index: int):
+        # RAM[SP] <- RAM[ 5 + index ]
+        # SP++
+        print('  @' + str(TEMP_ADDRESS_START + index))
+        print('  D=M')
+
+        print('  @SP')
+        print('  A=M')
+        print('  M=D')
+        this.write_increment_sp()
+
+
     def write_not(this) -> None:
-        this.write_operate_next_value('!')
+        this.write_operate_stack_top_value('!')
     def write_neg(this) -> None:
-        this.write_operate_next_value('-')
+        this.write_operate_stack_top_value('-')
 
     def write_and(this) -> None:
-        this.write_operate_next_values('&')
+        this.write_stack_operation('&')
     def write_add(this) -> None:
-        this.write_operate_next_values('+')
+        this.write_stack_operation('+')
     def write_sub(this) -> None:
-        this.write_operate_next_values('-')
+        this.write_stack_operation('-')
     def write_or(this) -> None:
-        this.write_operate_next_values('|')
+        this.write_stack_operation('|')
 
     def write_eq(this) -> None:
-        this.write_compare_values('JEQ')
+        this.write_compare_stack_values('JEQ')
     def write_lt(this) -> None:
-        this.write_compare_values('JLT')
+        this.write_compare_stack_values('JLT')
     def write_gt(this) -> None:
-        this.write_compare_values('JGT')
-
+        this.write_compare_stack_values('JGT')
 
     def write_increment_sp(this) -> None:
         print('  @SP')
         print('  M=M+1')
 
-    def decrement_sp(this) -> None:
+    def write_decrement_sp(this) -> None:
         print('  @SP')
         print('  M=M-1')
 
-    def write_operate_next_values(this, op: str) -> None:
+    def write_stack_operation(this, op: str) -> None:
         # Pop first value from stack
-        this.decrement_sp()
+        this.write_decrement_sp()
         print('  @SP')
         print('  A=M')
         print('  D=M')
-        print('  @tempvalue')
+        print('  @tmp')
         print('  M=D')
 
         # Pop second value from stack
-        this.decrement_sp()
+        this.write_decrement_sp()
         print('  @SP')
         print('  A=M')
         print('  D=M')
 
         # Write operation for first and second values
-        print('  @tempvalue')
+        print('  @tmp')
         print('  D=D'+op+'M')
 
         # Save result to stack
@@ -89,9 +157,9 @@ class CodeWriter:
 
         this.write_increment_sp()
 
-    def write_operate_next_value(this, op: str) -> None:
+    def write_operate_stack_top_value(this, op: str) -> None:
         # Pop first value from stack
-        this.decrement_sp()
+        this.write_decrement_sp()
         print('  @SP')
         print('  A=M')
         print('  D=M')
@@ -102,26 +170,26 @@ class CodeWriter:
         print('  M='+op +'D')
         this.write_increment_sp()
 
-    def write_compare_values(this, op: str):
+    def write_compare_stack_values(this, op: str):
         c = codeWriter.get_next_label_count()
 
         # Pop first value from stack
-        this.decrement_sp()
+        this.write_decrement_sp()
         print('  @SP')
         print('  A=M')
         print('  D=M')
-        print('  @tempvalue')
+        print('  @tmp')
         print('  M=D')
 
         # Pop second value from stack
-        this.decrement_sp()
+        this.write_decrement_sp()
         print('  @SP')
         print('  A=M')
         print('  D=M')
 
 
         # Compare values
-        print('  @tempvalue')
+        print('  @tmp')
         print('  D=D-M')
         print('  @IS_TRUE' +str(c))
         print('  D;'+ op)
@@ -170,19 +238,37 @@ def translate(instruction: str, codeWriter: CodeWriter):
             codeWriter.write_not()
         case _ if instruction.startswith('push constant'):
             parsed_value = int(re.search(r'^push constant (\d+)', instruction).group(1))
-            codeWriter.write_push_constant(parsed_value)
+            codeWriter.write_push_to_constant(parsed_value)
         case _ if instruction.startswith('push local'):
             parsed_value = int(re.search(r'^push local (\d+)', instruction).group(1))
+            codeWriter.write_push_to(LCL_ADDRESS, parsed_value)
+        case _ if instruction.startswith('push that'):
+            parsed_value = int(re.search(r'^push that (\d+)', instruction).group(1))
+            codeWriter.write_push_to(THAT_ADDRESS, parsed_value)
+        case _ if instruction.startswith('push this'):
+            parsed_value = int(re.search(r'^push this (\d+)', instruction).group(1))
+            codeWriter.write_push_to(THIS_ADDRESS, parsed_value)
+        case _ if instruction.startswith('push argument'):
+            parsed_value = int(re.search(r'^push argument (\d+)', instruction).group(1))
+            codeWriter.write_push_to(ARG_ADDRESS, parsed_value)
+        case _ if instruction.startswith('push temp'):
+            parsed_value = int(re.search(r'^push temp (\d+)', instruction).group(1))
+            codeWriter.write_push_to_temp(parsed_value)
         case _ if instruction.startswith('pop local'):
             parsed_value = int(re.search(r'^pop local (\d+)', instruction).group(1))
+            codeWriter.write_pop_to(LCL_ADDRESS, parsed_value)
         case _ if instruction.startswith('pop argument'):
             parsed_value = int(re.search(r'^pop argument (\d+)', instruction).group(1))
+            codeWriter.write_pop_to(ARG_ADDRESS, parsed_value)
         case _ if instruction.startswith('pop this'):
             parsed_value = int(re.search(r'^pop this (\d+)', instruction).group(1))
+            codeWriter.write_pop_to(THIS_ADDRESS, parsed_value)
         case _ if instruction.startswith('pop that'):
             parsed_value = int(re.search(r'^pop that (\d+)', instruction).group(1))
+            codeWriter.write_pop_to(THAT_ADDRESS, parsed_value)
         case _ if  instruction.startswith('pop temp'):
             parsed_value = int(re.search(r'^pop temp (\d+)', instruction).group(1))
+            codeWriter.write_pop_to_temp(parsed_value)
         case _ :
             raise Exception('Unknown instruction ' + instruction)
 
@@ -192,12 +278,14 @@ def parse_file(filename: str):
         content = f.read()
     lines = content.strip().split("\n")
     return lines
+
 filename = sys.argv[1]
 lines = parse_file(filename)
 line_number = 0
 
 codeWriter = CodeWriter()
 codeWriter.write_initialize_stack()
+
 for line in lines:
     line_number += 1
     if '//' in line:
@@ -206,4 +294,6 @@ for line in lines:
         continue
     line = line.strip()
     translate(line, codeWriter)
+
+codeWriter.write_end_loop()
 
