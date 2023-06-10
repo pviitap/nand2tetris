@@ -76,9 +76,9 @@ class CodeWriter:
         print('  M=D')
         this.write_increment_sp()
 
-    def write_pop_to_temp(this, index: int):
+    def write_pop_to_pointer(this, index: int):
         # SP--
-        # RAM[ 5 + index ] <- RAM[SP]
+        # RAM[ index ] <- RAM[SP]
 
         this.write_decrement_sp()
 
@@ -86,14 +86,14 @@ class CodeWriter:
         print('  A=M')
         print('  D=M')
 
-        print('  @' + str(TEMP_ADDRESS_START + index))
+        print('  @' + str(index))
         print('  M=D')
 
 
-    def write_push_to_temp(this, index: int):
-        # RAM[SP] <- RAM[ 5 + index ]
+    def write_push_to_pointer(this, index: int):
+        # RAM[SP] <- RAM[ index ]
         # SP++
-        print('  @' + str(TEMP_ADDRESS_START + index))
+        print('  @' + str(index))
         print('  D=M')
 
         print('  @SP')
@@ -216,29 +216,6 @@ class CodeWriter:
 
         this.write_increment_sp()
 
-    def write_pop_pointer(this, base_address: int):
-            # SP--
-            # RAM[ base_address ] <- RAM[SP]
-
-            this.write_decrement_sp()
-
-            print('  @SP')
-            print('  A=M')
-            print('  D=M')
-
-            print('  @' + str(base_address))
-            print('  M=D')
-
-    def write_push_pointer(this, base_address: int):
-            # RAM[SP] <- RAM[ base_address ]
-            # SP++
-            print('  @' + str(base_address))
-            print('  D=M')
-
-            print('  @SP')
-            print('  A=M')
-            print('  M=D')
-            this.write_increment_sp()
 
 def translate(instruction: str, codeWriter: CodeWriter):
     match instruction:
@@ -277,7 +254,7 @@ def translate(instruction: str, codeWriter: CodeWriter):
             codeWriter.write_push_to(ARG_ADDRESS, parsed_value)
         case _ if instruction.startswith('push temp'):
             parsed_value = int(re.search(r'^push temp (\d+)', instruction).group(1))
-            codeWriter.write_push_to_temp(parsed_value)
+            codeWriter.write_push_to_pointer(TEMP_ADDRESS_START + parsed_value)
         case _ if instruction.startswith('pop local'):
             parsed_value = int(re.search(r'^pop local (\d+)', instruction).group(1))
             codeWriter.write_pop_to(LCL_ADDRESS, parsed_value)
@@ -292,15 +269,15 @@ def translate(instruction: str, codeWriter: CodeWriter):
             codeWriter.write_pop_to(THAT_ADDRESS, parsed_value)
         case _ if  instruction.startswith('pop temp'):
             parsed_value = int(re.search(r'^pop temp (\d+)', instruction).group(1))
-            codeWriter.write_pop_to_temp(parsed_value)
+            codeWriter.write_pop_to_pointer(TEMP_ADDRESS_START + parsed_value)
         case _ if instruction.startswith('pop pointer 0'):
-            codeWriter.write_pop_pointer(THIS_ADDRESS)
+            codeWriter.write_pop_to_pointer(THIS_ADDRESS)
         case _ if instruction.startswith('pop pointer 1'):
-            codeWriter.write_pop_pointer(THAT_ADDRESS)
+            codeWriter.write_pop_to_pointer(THAT_ADDRESS)
         case _ if instruction.startswith('push pointer 0'):
-            codeWriter.write_push_pointer(THIS_ADDRESS)
+            codeWriter.write_push_to_pointer(THIS_ADDRESS)
         case _ if instruction.startswith('push pointer 1'):
-            codeWriter.write_push_pointer(THAT_ADDRESS)
+            codeWriter.write_push_to_pointer(THAT_ADDRESS)
         case _ :
             raise Exception('Unknown instruction ' + instruction)
 
