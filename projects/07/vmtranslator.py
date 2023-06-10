@@ -216,6 +216,30 @@ class CodeWriter:
 
         this.write_increment_sp()
 
+    def write_pop_pointer(this, base_address: int):
+            # SP--
+            # RAM[ base_address ] <- RAM[SP]
+
+            this.write_decrement_sp()
+
+            print('  @SP')
+            print('  A=M')
+            print('  D=M')
+
+            print('  @' + str(base_address))
+            print('  M=D')
+
+    def write_push_pointer(this, base_address: int):
+            # RAM[SP] <- RAM[ base_address ]
+            # SP++
+            print('  @' + str(base_address))
+            print('  D=M')
+
+            print('  @SP')
+            print('  A=M')
+            print('  M=D')
+            this.write_increment_sp()
+
 def translate(instruction: str, codeWriter: CodeWriter):
     match instruction:
         case 'add':
@@ -269,6 +293,14 @@ def translate(instruction: str, codeWriter: CodeWriter):
         case _ if  instruction.startswith('pop temp'):
             parsed_value = int(re.search(r'^pop temp (\d+)', instruction).group(1))
             codeWriter.write_pop_to_temp(parsed_value)
+        case _ if instruction.startswith('pop pointer 0'):
+            codeWriter.write_pop_pointer(THIS_ADDRESS)
+        case _ if instruction.startswith('pop pointer 1'):
+            codeWriter.write_pop_pointer(THAT_ADDRESS)
+        case _ if instruction.startswith('push pointer 0'):
+            codeWriter.write_push_pointer(THIS_ADDRESS)
+        case _ if instruction.startswith('push pointer 1'):
+            codeWriter.write_push_pointer(THAT_ADDRESS)
         case _ :
             raise Exception('Unknown instruction ' + instruction)
 
