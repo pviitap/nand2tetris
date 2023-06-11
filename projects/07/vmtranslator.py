@@ -8,7 +8,7 @@ ARG_ADDRESS = 2
 THIS_ADDRESS = 3
 THAT_ADDRESS = 4
 TEMP_ADDRESS_START = 5
-STATIC_ADDRESS = 16
+STATIC_ADDRESS_START = 16
 
 class CodeWriter:
     label_count: int =1
@@ -252,9 +252,6 @@ def translate(instruction: str, codeWriter: CodeWriter):
         case _ if instruction.startswith('push argument'):
             parsed_value = int(re.search(r'^push argument (\d+)', instruction).group(1))
             codeWriter.write_push_to(ARG_ADDRESS, parsed_value)
-        case _ if instruction.startswith('push temp'):
-            parsed_value = int(re.search(r'^push temp (\d+)', instruction).group(1))
-            codeWriter.write_push_to_pointer(TEMP_ADDRESS_START + parsed_value)
         case _ if instruction.startswith('pop local'):
             parsed_value = int(re.search(r'^pop local (\d+)', instruction).group(1))
             codeWriter.write_pop_to(LCL_ADDRESS, parsed_value)
@@ -267,9 +264,16 @@ def translate(instruction: str, codeWriter: CodeWriter):
         case _ if instruction.startswith('pop that'):
             parsed_value = int(re.search(r'^pop that (\d+)', instruction).group(1))
             codeWriter.write_pop_to(THAT_ADDRESS, parsed_value)
+
+        # push/pop temp
+        case _ if instruction.startswith('push temp'):
+            parsed_value = int(re.search(r'^push temp (\d+)', instruction).group(1))
+            codeWriter.write_push_to_pointer(TEMP_ADDRESS_START + parsed_value)
         case _ if  instruction.startswith('pop temp'):
             parsed_value = int(re.search(r'^pop temp (\d+)', instruction).group(1))
             codeWriter.write_pop_to_pointer(TEMP_ADDRESS_START + parsed_value)
+
+        # push/pop pointer
         case _ if instruction.startswith('pop pointer 0'):
             codeWriter.write_pop_to_pointer(THIS_ADDRESS)
         case _ if instruction.startswith('pop pointer 1'):
@@ -278,6 +282,14 @@ def translate(instruction: str, codeWriter: CodeWriter):
             codeWriter.write_push_to_pointer(THIS_ADDRESS)
         case _ if instruction.startswith('push pointer 1'):
             codeWriter.write_push_to_pointer(THAT_ADDRESS)
+
+        # push/pop static
+        case _ if instruction.startswith('push static'):
+            parsed_value = int(re.search(r'^push static (\d+)', instruction).group(1))
+            codeWriter.write_push_to_pointer(STATIC_ADDRESS_START + parsed_value)
+        case _ if  instruction.startswith('pop static'):
+            parsed_value = int(re.search(r'^pop static (\d+)', instruction).group(1))
+            codeWriter.write_pop_to_pointer(STATIC_ADDRESS_START + parsed_value)
         case _ :
             raise Exception('Unknown instruction ' + instruction)
 
