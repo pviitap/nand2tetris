@@ -17,15 +17,19 @@ class CodeWriter:
         return prefix + str(self.label_count)
 
     def write_init(self) -> None:
-        print('  @' + str(SP_START_VALUE))
-        print('  D=A')
-        print('  @SP')
-        print('  M=D')
+        print('''
+    @{SP_START_VALUE}
+    D=A
+    @SP
+    M=D
+            '''.format(SP_START_VALUE=str(SP_START_VALUE)))
 
     def write_end_loop(self) -> None:
-        print('(END)')
-        print('  @END')
-        print('  0;JMP')
+        print('''
+    (END)
+      @END
+      0;JMP
+            ''')
 
     def write_push_constant(self, value: int) -> None:
         print('  @' + str(abs(value)))
@@ -60,10 +64,10 @@ class CodeWriter:
         print('  M=D')
 
 
-    def write_push_to(self, base_address: int, index: int):
+    def write_push_from(self, base_address: int, index: int):
         # RAM[SP] <- RAM[ RAM[base_address] + index ]
         # SP++
-        print(' // push ' + str(base_address) + ', index ' + str(index))
+        print(' // push to address ' + str(base_address) + ', index ' + str(index))
         print('  @' + str(base_address))
         print('  D=M')
         print('  @' + str(index))
@@ -157,18 +161,14 @@ class CodeWriter:
         print('  @SP')
         print('  A=M')
         print('  D=M')
-        print('  @tmp')
-        print('  M=D')
 
         # Pop second value from stack
         self.write_decrement_sp()
         print('  @SP')
         print('  A=M')
-        print('  D=M')
 
         # Write operation for first and second values
-        print('  @tmp')
-        print('  D=D'+op+'M')
+        print('  D=M'+op+'D')
 
         # Save result to stack
         print('  @SP')
@@ -267,6 +267,7 @@ class CodeWriter:
         for i in range(0, num_locals):
             print('  // initialize local ' + str(i))
             self.write_init_zero(LCL_ADDRESS, i)
+            self.write_increment_sp()
         
     def write_call(self, function_name: str, num_args: int) -> None:
         # Generate label for return address and save it to stack
@@ -285,7 +286,7 @@ class CodeWriter:
         print('  @5')
         print('  D=A')
         print('  @' + str(num_args))
-        print('  D=A-D')
+        print('  D=A+D')
         print('  @SP')
         print('  D=M-D')
         print('  @' + str(ARG_ADDRESS))
@@ -303,6 +304,8 @@ class CodeWriter:
         self.write_label(return_address_label)
 
     def write_return(self) -> None:
+
+
         # FRAME = LCL
         print('  @' + str(LCL_ADDRESS))
         print('  D=M' )
@@ -373,10 +376,11 @@ class CodeWriter:
         print('  D=M' )
         print('  @' + str(LCL_ADDRESS))
         print('  M=D' )
-
+        
         #goto RET
         print('  @RET' )
         print('  A=M' )
+        print('  0;JMP' )
 
 
 def translate(instruction: str, codeWriter: CodeWriter):
@@ -424,16 +428,16 @@ def translate(instruction: str, codeWriter: CodeWriter):
             codeWriter.write_push_constant(parsed_value)
         case _ if instruction.startswith('push local'):
             parsed_value = int(re.search(r'^push local (\d+)', instruction).group(1))
-            codeWriter.write_push_to(LCL_ADDRESS, parsed_value)
+            codeWriter.write_push_from(LCL_ADDRESS, parsed_value)
         case _ if instruction.startswith('push that'):
             parsed_value = int(re.search(r'^push that (\d+)', instruction).group(1))
-            codeWriter.write_push_to(THAT_ADDRESS, parsed_value)
+            codeWriter.write_push_from(THAT_ADDRESS, parsed_value)
         case _ if instruction.startswith('push this'):
             parsed_value = int(re.search(r'^push this (\d+)', instruction).group(1))
-            codeWriter.write_push_to(THIS_ADDRESS, parsed_value)
+            codeWriter.write_push_from(THIS_ADDRESS, parsed_value)
         case _ if instruction.startswith('push argument'):
             parsed_value = int(re.search(r'^push argument (\d+)', instruction).group(1))
-            codeWriter.write_push_to(ARG_ADDRESS, parsed_value)
+            codeWriter.write_push_from(ARG_ADDRESS, parsed_value)
         case _ if instruction.startswith('pop local'):
             parsed_value = int(re.search(r'^pop local (\d+)', instruction).group(1))
             codeWriter.write_pop_to(LCL_ADDRESS, parsed_value)
@@ -487,7 +491,7 @@ lines = parse_file(filename)
 line_number = 0
 
 codeWriter = CodeWriter()
-codeWriter.write_init()
+#codeWriter.write_init()
 
 for line in lines:
     line_number += 1
