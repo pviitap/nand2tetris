@@ -3,11 +3,12 @@ import xml.dom.minidom
 from pprint import pprint
 
 SYMBOLS = list(';[](){}=.,+-*/|&<>')
+OPERATORS = list('=+-*/|&<>')
 KEYWORDS = 'class constructor method function this var static field int boolean char void let do if else while return true false null'.split(' ')
 
 def tokenize(lines):
     tokens = []
-    lines_without_comments = [line.split('//')[0].strip('\n').strip(' ') for line in lines
+    lines_without_comments = [line.split('//')[0].strip('\n').strip('\t').strip(' ') for line in lines
                               if not line.startswith(('//', '/**'))]
 
     for line in lines_without_comments:
@@ -86,7 +87,7 @@ def find_matching_pair(tokens, opening_char, closing_char):
             elif t[1] == opening_char:
                 count_opening += 1
             pos += 1
-        raise ValueError(opening_char +' was never closed')
+        raise SyntaxError(opening_char +' was never closed')
 
 def compile_subroutinedec(curtoken, tokens_left, parsetree):
         # subroutineDec* = ('constructor'|'function'|'method') ('void'|type) subroutineName (parameterList) subroutineBody
@@ -95,7 +96,7 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
         # 'constructor'|'function'|'method'
         if curtoken[1] not in ('constructor','function','method'):
             pprint(curtoken)
-            raise('error parsing subroutineDec')
+            raise(SyntaxError('error parsing subroutineDec'))
         else:
             subroutineDec.addChild(TreeNode(curtoken[0],curtoken[1]))
             curtoken = tokens_left[0]
@@ -105,8 +106,9 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
         if curtoken[1] == 'void':
             curtoken, tokens_left = compile('void', curtoken, tokens_left, subroutineDec)
         else:
-            pprint(curtoken)
-            raise('Not implemented yet (type)')
+            subroutineDec.addChild(TreeNode(curtoken[0],curtoken[1]))
+            curtoken = tokens_left[0]
+            tokens_left = tokens_left[1:]
 
 
         # subroutineName
@@ -114,14 +116,13 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
         curtoken = tokens_left[0]
         tokens_left = tokens_left[1:]
 
-
         curtoken, tokens_left = compile('(', curtoken, tokens_left, subroutineDec)
-        # parameterList
-        # TODO if not empty
-        subroutineDec.addChild(TreeNode('parameterList'))
+        parameterList = TreeNode('parameterList')
         if curtoken[1] != ')':
-            raise('Not implemented yet (parameterList)')
+            curtoken, tokens_left = compile_parameterList(curtoken,tokens_left,parameterList)
+        subroutineDec.addChild(parameterList)
         curtoken, tokens_left = compile(')', curtoken, tokens_left, subroutineDec)
+
 
         # subroutineBody
         subroutineBody = TreeNode('subroutineBody')
@@ -129,27 +130,18 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
 
         curtoken, tokens_left = compile('{', curtoken, tokens_left, subroutineBody)
 
-        # varDec* = 'var' type varName (','type varName)*;
+        # varDec* = 'var' type varName (',' varName)*;
         while curtoken[1] == 'var':
             varDec = TreeNode('varDec')
             curtoken, tokens_left = compile('var', curtoken, tokens_left, varDec)
 
+            # type
             varDec.addChild(TreeNode(curtoken[0],curtoken[1]))
             curtoken = tokens_left[0]
             tokens_left = tokens_left[1:]
 
-            varDec.addChild(TreeNode(curtoken[0],curtoken[1]))
-            curtoken = tokens_left[0]
-            tokens_left = tokens_left[1:]
-
-            # TODO multiple vars (','type varName)*
-            while curtoken[1] == ',':
-                curtoken, tokens_left = compile(',', curtoken, tokens_left, varDec)
-
-                varDec.addChild(TreeNode(curtoken[0],curtoken[1]))
-                curtoken = tokens_left[0]
-                tokens_left = tokens_left[1:]
-
+            #varName (',' varName)*;
+            curtoken, tokens_left = compile_varnames(curtoken, tokens_left, varDec)
 
             curtoken, tokens_left = compile(';', curtoken, tokens_left, varDec)
             subroutineBody.addChild(varDec)
@@ -160,6 +152,7 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
 
         pos = find_matching_pair(tokens_left,'{','}')
         statements = parse_tokens(curtoken,tokens_left[:pos],TreeNode('statements'))
+
         curtoken = tokens_left[pos]
         tokens_left = tokens_left[pos+1:]
 
@@ -168,6 +161,45 @@ def compile_subroutinedec(curtoken, tokens_left, parsetree):
         parsetree.addChild(subroutineDec)
 
         return (curtoken, tokens_left)
+
+def compile_varnames(curtoken, tokens_left, parsetree):
+    #varName
+    parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+    curtoken = tokens_left[0]
+    tokens_left = tokens_left[1:]
+
+    while curtoken[1] == ',':
+        curtoken, tokens_left = compile(',', curtoken, tokens_left, parsetree)
+
+        #varName
+        parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+        curtoken = tokens_left[0]
+        tokens_left = tokens_left[1:]
+    return (curtoken, tokens_left)
+
+def compile_parameterList(curtoken, tokens_left, parsetree):
+    # type varName (, type varName)
+    parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+    curtoken = tokens_left[0]
+    tokens_left = tokens_left[1:]
+
+    parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+    curtoken = tokens_left[0]
+    tokens_left = tokens_left[1:]
+
+    while curtoken[1] == ',':
+        curtoken, tokens_left = compile(',', curtoken, tokens_left, parsetree)
+
+        #type
+        parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+        curtoken = tokens_left[0]
+        tokens_left = tokens_left[1:]
+
+        #varName
+        parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+        curtoken = tokens_left[0]
+        tokens_left = tokens_left[1:]
+    return (curtoken, tokens_left)
 
 def compile_class(curtoken, tokens_left, parsetree):
         # 'class' className '{' classVarDec* subroutineDec* '}'
@@ -185,33 +217,38 @@ def compile_class(curtoken, tokens_left, parsetree):
         if curtoken[1] in ['static', 'field']:
             while curtoken[1] in ['static', 'field']:
                 classVarDec = TreeNode('classVarDec')
+
+                # static|field
                 classVarDec.addChild(TreeNode(curtoken[0],curtoken[1]))
                 curtoken = tokens_left[0]
                 tokens_left = tokens_left[1:]
+                # type
                 classVarDec.addChild(TreeNode(curtoken[0],curtoken[1]))
                 curtoken = tokens_left[0]
                 tokens_left = tokens_left[1:]
-                classVarDec.addChild(TreeNode(curtoken[0],curtoken[1]))
-                curtoken = tokens_left[0]
-                tokens_left = tokens_left[1:]
+
+                # varName (, varName)
+                curtoken, tokens_left = compile_varnames(curtoken,tokens_left,classVarDec)
+
                 curtoken, tokens_left = compile(';', curtoken, tokens_left, classVarDec)
-            node.addChild(classVarDec)
+                node.addChild(classVarDec)
 
         # subroutineDec* = ('constructor'|'function'|'method') ('void'|type) subroutineName (parameterList) subroutineBody
-        while curtoken[1] == 'contructor' or curtoken[1] == 'function' or curtoken[1] == 'method':
+        while curtoken[1] == 'constructor' or curtoken[1] == 'function' or curtoken[1] == 'method':
             curtoken, tokens_left = compile_subroutinedec(curtoken,tokens_left,node)
+
 
         parsetree.addChild(node)
 
         if curtoken[1] == '}':
             node.addChild(TreeNode(curtoken[0],curtoken[1]))
         else:
-             raise('Could not compile class, missing ending }')
+             raise(SyntaxError('Could not compile class, missing ending }'))
 
         return parse_tokens(curtoken, tokens_left, parsetree)
 
 def compile_let(curtoken, tokens_left, parsetree):
-        #letStatement = let varName '=' expression ;
+        #letStatement = let varName '('[expression]')'? '=' expression ;
         letStatement = TreeNode('letStatement')
 
         curtoken, tokens_left = compile('let', curtoken, tokens_left, letStatement)
@@ -222,33 +259,42 @@ def compile_let(curtoken, tokens_left, parsetree):
         tokens_left = tokens_left[1:]
 
         if curtoken[1] == '[':
-            pprint(curtoken)
-            exit()
+            expression = TreeNode('expression')
+
+            curtoken, tokens_left = compile('[', curtoken, tokens_left, letStatement)
+            pos = find_char(tokens_left,']')
+            expressions = compile_expression(curtoken,tokens_left[:pos],expression)
+            letStatement.addChild(expressions)
+            curtoken = tokens_left[pos]
+            tokens_left = tokens_left[pos+1:]
+
+            curtoken, tokens_left = compile(']', curtoken, tokens_left, letStatement)
+
 
         curtoken, tokens_left = compile('=', curtoken, tokens_left, letStatement)
 
         expression = TreeNode('expression')
         pos = find_char(tokens_left,';')
-
         expressions = compile_expression(curtoken,tokens_left[:pos],expression)
         letStatement.addChild(expressions)
         curtoken = tokens_left[pos]
         tokens_left = tokens_left[pos+1:]
 
-        curtoken, tokens_left = compile(';', curtoken, tokens_left, letStatement)
-
-        parsetree.addChild(letStatement)
-
+        if len(tokens_left)>0:
+            curtoken, tokens_left = compile(';', curtoken, tokens_left, letStatement)
+            parsetree.addChild(letStatement)
+        else:
+            letStatement.addChild(TreeNode(curtoken[0],curtoken[1]))
+            parsetree.addChild(letStatement)
+            return parsetree
+            
         return parse_tokens(curtoken, tokens_left, parsetree)
 
 
 def compile(token, curtoken, tokens_left, parsetree):
         if curtoken[1] != token:
             message = (curtoken[1] + ' does not match ' + token )
-            print(message)
-            pprint(curtoken)
-            pprint(tokens_left)
-            raise('fail')
+            raise(SyntaxError(message))
         node = TreeNode(curtoken[0],curtoken[1])
         parsetree.addChild(node)
         curtoken = tokens_left[0]
@@ -257,15 +303,18 @@ def compile(token, curtoken, tokens_left, parsetree):
 
 def compile_return(curtoken, tokens_left, parsetree):
         returnStatement = TreeNode('returnStatement')
-
         curtoken, tokens_left = compile('return', curtoken, tokens_left, returnStatement)
-        if curtoken[1] == ';':
-            curtoken, tokens_left = compile(';', curtoken, tokens_left, returnStatement)
-        else:
-           raise('not implemented')
+        if curtoken[1] != ';':
+            expression = TreeNode('expression')
+            pos = find_char(tokens_left,';')
+            expressions = compile_expression(curtoken,tokens_left[:pos],expression)
+            returnStatement.addChild(expressions)
+            curtoken = tokens_left[pos]
+            tokens_left = tokens_left[pos+1:]
 
+        returnStatement.addChild(TreeNode(curtoken[0],curtoken[1]))
         parsetree.addChild(returnStatement)
-        return parse_tokens(curtoken, tokens_left, parsetree)
+        return (curtoken, tokens_left)
 
 def compile_if(curtoken, tokens_left, parsetree):
         #ifStatement = 'if' '(' expression ')' {' statements* '}' (else' '(' expression ')' { statements } ')'?
@@ -286,18 +335,14 @@ def compile_if(curtoken, tokens_left, parsetree):
         pos = find_matching_pair(tokens_left,'{','}')
         curtoken, tokens_left = compile('{', curtoken, tokens_left, ifStatement)
 
-        if curtoken[1] == '}':
-            ifStatement.addChild(TreeNode('statements'))
-        else:
-            pprint(curtoken)
-            pprint(tokens_left[:pos])
-            exit()
-            #TODO fix
-            # find matching }
-            #statements = parse_tokens(curtoken,tokens_left[:pos],TreeNode('statements'))
-            #curtoken = tokens_left[pos-1]
-            #tokens_left = tokens_left[pos:]
-            #ifStatement.addChild(statements)
+        statements = TreeNode('statements')
+        if curtoken[1] != '}':
+            #pos = find_matching_pair(tokens_left,'{','}')
+            ifStatements = parse_tokens(curtoken,tokens_left[:pos-1],statements)
+            curtoken = tokens_left[pos-1]
+            tokens_left = tokens_left[pos:]
+
+        ifStatement.addChild(statements)
 
         curtoken, tokens_left = compile('}', curtoken, tokens_left, ifStatement)
 
@@ -321,7 +366,7 @@ def compile_if(curtoken, tokens_left, parsetree):
         return parse_tokens(curtoken, tokens_left, parsetree)
 
 def compile_do(curtoken, tokens_left, parsetree):
-        #doStatement = do identifier '.' identifier(expressionlist*) ;
+        #doStatement = do identifier '.' identifier(expressionList*) ;
         doStatement = TreeNode('doStatement')
 
         curtoken, tokens_left = compile('do', curtoken, tokens_left, doStatement)
@@ -331,25 +376,37 @@ def compile_do(curtoken, tokens_left, parsetree):
         curtoken = tokens_left[0]
         tokens_left = tokens_left[1:]
 
-        curtoken, tokens_left = compile('.', curtoken, tokens_left, doStatement)
+        if curtoken[1] == '.':
+            curtoken, tokens_left = compile('.', curtoken, tokens_left, doStatement)
 
-        varname = TreeNode('identifier',curtoken[1])
-        doStatement.addChild(varname)
-        curtoken = tokens_left[0]
-        tokens_left = tokens_left[1:]
-
-
-        curtoken, tokens_left = compile('(', curtoken, tokens_left, doStatement)
+            varname = TreeNode('identifier',curtoken[1])
+            doStatement.addChild(varname)
+            curtoken = tokens_left[0]
+            tokens_left = tokens_left[1:]
 
         #expressionList*
-        #TODO not empty?
-        expressionList = TreeNode('expressionList')
-        doStatement.addChild(expressionList)
+        curtoken, tokens_left = compile('(', curtoken, tokens_left, doStatement)
+        pos = find_matching_pair(tokens_left,'(',')')
+        pprint(curtoken)
+        pprint(tokens_left[:pos])
+        expressionList = compile_expressionList(curtoken, tokens_left[:pos], doStatement)
+        print_tree(expressionList)
+        print("TODO")
+        exit()
+        curtoken = tokens_left[pos-1]
+        tokens_left = tokens_left[pos:]
 
         curtoken, tokens_left = compile(')', curtoken, tokens_left, doStatement)
-        curtoken, tokens_left = compile(';', curtoken, tokens_left, doStatement)
 
-        parsetree.addChild(doStatement)
+
+        if len(tokens_left)>0:
+            curtoken, tokens_left = compile(';', curtoken, tokens_left, doStatement)
+            parsetree.addChild(doStatement)
+        else:
+            doStatement.addChild(TreeNode(curtoken[0],curtoken[1]))
+            parsetree.addChild(doStatement)
+            return parsetree
+
         return parse_tokens(curtoken, tokens_left, parsetree)
 
 def compile_while(curtoken, tokens_left, parsetree):
@@ -360,57 +417,102 @@ def compile_while(curtoken, tokens_left, parsetree):
 
         curtoken, tokens_left = compile('(', curtoken, tokens_left, whileStatement)
 
+
         expression = TreeNode('expression')
         # find matching )
-        pos = find_matching_pair(tokens_left,'(',')')+1
-        expressions = parse_tokens(curtoken,tokens_left[0:pos],expression)
+        pos = find_matching_pair(tokens_left,'(',')')
+
+        expressions = compile_expression(curtoken,tokens_left[:pos],expression)
+
         whileStatement.addChild(expressions)
-        curtoken = tokens_left[pos-1]
-        tokens_left = tokens_left[pos:]
+        curtoken = tokens_left[pos]
+        tokens_left = tokens_left[pos+1:]
+
         curtoken, tokens_left = compile(')', curtoken, tokens_left, whileStatement)
 
         curtoken, tokens_left = compile('{', curtoken, tokens_left, whileStatement)
 
         # find matching }
         pos = find_matching_pair(tokens_left,'{','}')+1
-        statements = parse_tokens(curtoken,tokens_left[0:pos],TreeNode('statements'))
+        statements = parse_tokens(curtoken,tokens_left[:pos-1],TreeNode('statements'))
+
         whileStatement.addChild(statements)
         curtoken = tokens_left[pos-1]
-        tokens_left = tokens_left[pos-1:]
+        tokens_left = tokens_left[pos:]
 
-        curtoken, tokens_left = compile('}', curtoken, tokens_left, whileStatement)
 
-        parsetree.addChild(whileStatement)
+        if len(tokens_left)>0:
+            curtoken, tokens_left = compile('}', curtoken, tokens_left, whileStatement)
+            parsetree.addChild(whileStatement)
+        else:
+            whileStatement.addChild(TreeNode(curtoken[0],curtoken[1]))
+            parsetree.addChild(whileStatement)
+            return parsetree
 
         return parse_tokens(curtoken, tokens_left, parsetree)
+
+def compile_expressionList(curtoken, tokens_left, parsetree):
+    # expressionList = (expression (', expression)* )? 
+    expressionList = TreeNode('expressionList')
+
+    while curtoken[1] != ')':
+        pos = find_char(tokens_left,',')
+        if pos == None:
+            pos = len(tokens_left)
+            expressions = compile_expression(curtoken,tokens_left[:pos],TreeNode('expression'))
+            return expressionList
+        else:
+            expressions = compile_expression(curtoken,tokens_left[:pos],TreeNode('expression'))
+            curtoken = tokens_left[pos]
+            tokens_left = tokens_left[pos+1:]
+
+        expressionList.addChild(expressions)
+
+        if curtoken[1] == ',':
+            curtoken, tokens_left = compile(',', curtoken, tokens_left, expressionList)
+
+    return expressionList
+
 
 def compile_expression(curtoken, tokens_left, parsetree):
-    #expression = term(op term)*
+    #expression = term (op term)*
 
-    if curtoken[0] == 'identifier':
-        term = TreeNode('term')
-        curnode = TreeNode('identifier',curtoken[1])
-        term.addChild(curnode)
-        parsetree.addChild(term)
-    elif curtoken[0] == 'integerConstant':
-        term = TreeNode('term')
-        curnode = TreeNode('constant',curtoken[1])
-        term.addChild(curnode)
-        parsetree.addChild(term)
-    elif curtoken[0] == 'symbol':
-        op = TreeNode('op')
-        curnode = TreeNode('symbol',curtoken[1])
-        op.addChild(curnode)
-        parsetree.addChild(op)
-    else:
-        raise('not impl')
+    term = TreeNode('term')
 
-    if len(tokens_left) == 0:
-        return parsetree
-    else:
-        curtoken = tokens_left[0]
-        tokens_left = tokens_left[1:]
-        return parse_tokens(curtoken, tokens_left, parsetree)
+    while len(tokens_left) > 0:
+        if curtoken[0] == 'symbol' and curtoken[1] in OPERATORS:
+            #add current term to parsetree and start new term
+            parsetree.addChild(term)
+            term = TreeNode('term')
+            parsetree.addChild(TreeNode(curtoken[0],curtoken[1]))
+            curtoken = tokens_left[0]
+            tokens_left = tokens_left[1:]
+        elif curtoken[0] == 'symbol' and curtoken[1] == '(':
+            expressionList = TreeNode('expressionList')
+            expression = TreeNode('expression')
+            pos = find_matching_pair(tokens_left,'(',')')
+            curtoken, tokens_left = compile('(', curtoken, tokens_left, term)
+            children = compile_expression(curtoken,tokens_left[:pos-1],expression)
+            expressionList.addChild(children)
+            term.addChild(expressionList)
+            curtoken = tokens_left[pos-1]
+            tokens_left = tokens_left[pos:]
+        elif curtoken[0] == 'symbol' and curtoken[1] == '[':
+            expression = TreeNode('expression')
+            pos = find_matching_pair(tokens_left,'[',']')
+            curtoken, tokens_left = compile('[', curtoken, tokens_left, term)
+            children = compile_expression(curtoken,tokens_left[:pos-1],expression)
+            term.addChild(expression)
+            curtoken = tokens_left[pos-1]
+            tokens_left = tokens_left[pos:]
+        else:
+            term.addChild(TreeNode(curtoken[0],curtoken[1]))
+            curtoken = tokens_left[0]
+            tokens_left = tokens_left[1:]
+
+    term.addChild(TreeNode(curtoken[0],curtoken[1]))
+    parsetree.addChild(term)
+    return parsetree
 
 
 def parse_tokens(curtoken, tokens_left, parsetree):
@@ -441,10 +543,7 @@ def parse_tokens(curtoken, tokens_left, parsetree):
     elif curtoken[0] == 'keyword' and curtoken[1] == 'while':
         return compile_while(curtoken, tokens_left, parsetree)
     elif curtoken[0] == 'keyword' and curtoken[1] == 'return':
-        returnStatement = TreeNode('returnStatement')
-        curtoken, tokens_left = compile('return', curtoken, tokens_left, returnStatement)
-        s = parse_tokens(curtoken, tokens_left, returnStatement)
-        parsetree.addChild(s)
+        curtoken, tokens_left = compile_return(curtoken, tokens_left, parsetree)
     else:
         curnode = TreeNode(curtoken[0],curtoken[1])
         parsetree.addChild(curnode)
@@ -465,6 +564,7 @@ with open(filename, 'r') as f:
 #lines = ['while (count < 100) {', 'let count = count + 1;' , '}', 'while (count < 220) {', 'let count = count + 2;' , '}']
 #lines = ['while (count < 100) {', 'let count = count + 1;','let foo = foo + 1;' , '}']
 #lines = ['class SquareGame {','field Square square;','}']
+#lines = ['class SquareGame {','function void main() {', 'do Output.printInt(sum / length);', 'return;', '}', '}']
 
 
 tokens = tokenize(lines)
